@@ -510,6 +510,9 @@ type Configuration struct {
 	idleLoginTimeout      time.Duration
 	defender              Defender
 	whitelist             *whitelist
+	// Set to true to add metadata to file stating which protocol was used to upload.
+	// An example: { "protocol": "sftp" }
+	AddProtocolMetadata bool `json:"add_protocol_metadata" mapstructure:"add_protocol_metadata"`
 }
 
 // IsAtomicUploadEnabled returns true if atomic upload is enabled

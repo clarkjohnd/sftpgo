@@ -232,7 +232,7 @@ func (fs *S3Fs) Open(name string, offset int64) (File, *pipeat.PipeReaderAt, fun
 }
 
 // Create creates or opens the named file for writing
-func (fs *S3Fs) Create(name string, flag int) (File, *PipeWriter, func(), error) {
+func (fs *S3Fs) Create(name string, flag int, metadata map[string]string) (File, *PipeWriter, func(), error) {
 	r, w, err := pipeat.PipeInDir(fs.localTempDir)
 	if err != nil {
 		return nil, nil, nil, err
@@ -265,6 +265,7 @@ func (fs *S3Fs) Create(name string, flag int) (File, *PipeWriter, func(), error)
 			ACL:          types.ObjectCannedACL(fs.config.ACL),
 			StorageClass: types.StorageClass(fs.config.StorageClass),
 			ContentType:  util.NilIfEmpty(contentType),
+			Metadata:     metadata,
 		})
 		r.CloseWithError(err) //nolint:errcheck
 		p.Done(err)
@@ -395,7 +396,7 @@ func (fs *S3Fs) Mkdir(name string) error {
 	if !strings.HasSuffix(name, "/") {
 		name += "/"
 	}
-	_, w, _, err := fs.Create(name, -1)
+	_, w, _, err := fs.Create(name, -1, nil)
 	if err != nil {
 		return err
 	}

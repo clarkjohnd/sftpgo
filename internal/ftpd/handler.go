@@ -364,7 +364,6 @@ func (c *Connection) uploadFile(fs vfs.Fs, fsPath, ftpPath string, flags int) (f
 		c.Log(logger.LevelWarn, "writing file %#v is not allowed", ftpPath)
 		return nil, ftpserver.ErrFileNameNotAllowed
 	}
-
 	filePath := fsPath
 	if common.Config.IsAtomicUploadEnabled() && fs.IsAtomicUploadSupported() {
 		filePath = fs.GetAtomicUploadPath(fsPath)
@@ -406,7 +405,13 @@ func (c *Connection) handleFTPUploadToNewFile(fs vfs.Fs, flags int, resolvedPath
 		c.Log(logger.LevelDebug, "upload for file %#v denied by pre action: %v", requestPath, err)
 		return nil, fmt.Errorf("%w, denied by pre-upload action", ftpserver.ErrFileNameNotAllowed)
 	}
-	file, w, cancelFn, err := fs.Create(filePath, flags)
+
+	fileMetadata := make(map[string]string)
+	if common.Config.AddProtocolMetadata {
+		fileMetadata["protocol"] = "ftp"
+	}
+
+	file, w, cancelFn, err := fs.Create(filePath, flags, fileMetadata)
 	if err != nil {
 		c.Log(logger.LevelError, "error creating file %#v, flags %v: %+v", resolvedPath, flags, err)
 		return nil, c.GetFsError(fs, err)
@@ -461,7 +466,12 @@ func (c *Connection) handleFTPUploadToExistingFile(fs vfs.Fs, flags int, resolve
 		}
 	}
 
-	file, w, cancelFn, err := fs.Create(filePath, flags)
+	fileMetadata := make(map[string]string)
+	if common.Config.AddProtocolMetadata {
+		fileMetadata["protocol"] = "ftp"
+	}
+
+	file, w, cancelFn, err := fs.Create(filePath, flags, fileMetadata)
 	if err != nil {
 		c.Log(logger.LevelError, "error opening existing file, flags: %v, source: %#v, err: %+v", flags, filePath, err)
 		return nil, c.GetFsError(fs, err)

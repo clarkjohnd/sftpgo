@@ -208,15 +208,23 @@ func (c *Connection) putFile(fs vfs.Fs, fsPath, virtualPath string) (webdav.File
 
 func (c *Connection) handleUploadToNewFile(fs vfs.Fs, resolvedPath, filePath, requestPath string) (webdav.File, error) {
 	diskQuota, transferQuota := c.HasSpace(true, false, requestPath)
+
 	if !diskQuota.HasSpace || !transferQuota.HasUploadSpace() {
 		c.Log(logger.LevelInfo, "denying file write due to quota limits")
 		return nil, common.ErrQuotaExceeded
 	}
+
 	if err := common.ExecutePreAction(c.BaseConnection, common.OperationPreUpload, resolvedPath, requestPath, 0, 0); err != nil {
 		c.Log(logger.LevelDebug, "upload for file %#v denied by pre action: %v", requestPath, err)
 		return nil, c.GetPermissionDeniedError()
 	}
-	file, w, cancelFn, err := fs.Create(filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC)
+
+	fileMetadata := make(map[string]string)
+	if common.Config.AddProtocolMetadata {
+		fileMetadata["protocol"] = "webdavd"
+	}
+
+	file, w, cancelFn, err := fs.Create(filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, fileMetadata)
 	if err != nil {
 		c.Log(logger.LevelError, "error creating file %#v: %+v", resolvedPath, err)
 		return nil, c.GetFsError(fs, err)
@@ -261,7 +269,12 @@ func (c *Connection) handleUploadToExistingFile(fs vfs.Fs, resolvedPath, filePat
 		}
 	}
 
-	file, w, cancelFn, err := fs.Create(filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC)
+	fileMetadata := make(map[string]string)
+	if common.Config.AddProtocolMetadata {
+		fileMetadata["protocol"] = "sftp"
+	}
+
+	file, w, cancelFn, err := fs.Create(filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, fileMetadata)
 	if err != nil {
 		c.Log(logger.LevelError, "error creating file %#v: %+v", resolvedPath, err)
 		return nil, c.GetFsError(fs, err)

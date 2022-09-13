@@ -201,7 +201,12 @@ func (c *Connection) handleUploadFile(fs vfs.Fs, resolvedPath, filePath, request
 
 	maxWriteSize, _ := c.GetMaxWriteSize(diskQuota, false, fileSize, fs.IsUploadResumeSupported())
 
-	file, w, cancelFn, err := fs.Create(filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC)
+	fileMetadata := make(map[string]string)
+	if common.Config.AddProtocolMetadata {
+		fileMetadata["protocol"] = "http"
+	}
+
+	file, w, cancelFn, err := fs.Create(filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, fileMetadata)
 	if err != nil {
 		c.Log(logger.LevelError, "error opening existing file, source: %#v, err: %+v", filePath, err)
 		return nil, c.GetFsError(fs, err)
