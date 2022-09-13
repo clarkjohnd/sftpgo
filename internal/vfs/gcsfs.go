@@ -187,6 +187,9 @@ func (fs *GCSFs) Create(name string, flag int, metadata map[string]string) (File
 	if fs.config.ACL != "" {
 		objectWriter.PredefinedACL = fs.config.ACL
 	}
+
+	objectWriter.ObjectAttrs.Metadata = metadata
+
 	go func() {
 		defer cancelFn()
 
