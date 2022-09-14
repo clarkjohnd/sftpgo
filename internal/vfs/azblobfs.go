@@ -246,14 +246,10 @@ func (fs *AzureBlobFs) Create(name string, flag int, metadata map[string]string)
 		headers.BlobContentType = &contentType
 	}
 
-	if metadata != nil {
-		blockBlob.SetMetadata(ctx, metadata, nil)
-	}
-
 	go func() {
 		defer cancelFn()
 
-		err := fs.handleMultipartUpload(ctx, r, blockBlob, &headers)
+		err := fs.handleMultipartUpload(ctx, r, blockBlob, &headers, metadata)
 		r.CloseWithError(err) //nolint:errcheck
 		p.Done(err)
 		fsLog(fs, logger.LevelDebug, "upload completed, path: %#v, readed bytes: %v, err: %+v", name, r.GetReadedBytes(), err)
@@ -961,7 +957,7 @@ func (fs *AzureBlobFs) handleMultipartDownload(ctx context.Context, blockBlob *a
 }
 
 func (fs *AzureBlobFs) handleMultipartUpload(ctx context.Context, reader io.Reader,
-	blockBlob *azblob.BlockBlobClient, httpHeaders *azblob.BlobHTTPHeaders,
+	blockBlob *azblob.BlockBlobClient, httpHeaders *azblob.BlobHTTPHeaders, metadata map[string]string,
 ) error {
 	partSize := fs.config.UploadPartSize
 	guard := make(chan struct{}, fs.config.UploadConcurrency)
@@ -1045,6 +1041,7 @@ func (fs *AzureBlobFs) handleMultipartUpload(ctx context.Context, reader io.Read
 
 	commitOptions := azblob.BlockBlobCommitBlockListOptions{
 		BlobHTTPHeaders: httpHeaders,
+		Metadata:        metadata,
 	}
 	if fs.config.AccessTier != "" {
 		commitOptions.Tier = (*azblob.AccessTier)(&fs.config.AccessTier)
