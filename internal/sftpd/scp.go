@@ -247,7 +247,12 @@ func (c *scpCommand) handleUploadFile(fs vfs.Fs, resolvedPath, filePath string, 
 
 	maxWriteSize, _ := c.connection.GetMaxWriteSize(diskQuota, false, fileSize, fs.IsUploadResumeSupported())
 
-	file, w, cancelFn, err := fs.Create(filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, nil)
+	fileMetadata := make(map[string]string)
+	if common.Config.AddProtocolMetadata {
+		fileMetadata["protocol"] = "scp"
+	}
+
+	file, w, cancelFn, err := fs.Create(filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, fileMetadata)
 	if err != nil {
 		c.connection.Log(logger.LevelError, "error creating file %#v: %v", resolvedPath, err)
 		c.sendErrorMessage(fs, err)
