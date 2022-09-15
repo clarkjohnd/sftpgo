@@ -46,6 +46,7 @@ import (
 
 const (
 	logSender                             = "httpd"
+	protocol                              = "http"
 	tokenPath                             = "/api/v2/token"
 	logoutPath                            = "/api/v2/logout"
 	userTokenPath                         = "/api/v2/user/token"

@@ -219,12 +219,7 @@ func (c *Connection) handleUploadToNewFile(fs vfs.Fs, resolvedPath, filePath, re
 		return nil, c.GetPermissionDeniedError()
 	}
 
-	fileMetadata := make(map[string]string)
-	if common.Config.AddProtocolMetadata {
-		fileMetadata["protocol"] = "webdavd"
-	}
-
-	file, w, cancelFn, err := fs.Create(filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, fileMetadata)
+	file, w, cancelFn, err := fs.Create(filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, util.AddProtocolMetadata(common.Config.AddProtocolMetadata, protocol))
 	if err != nil {
 		c.Log(logger.LevelError, "error creating file %#v: %+v", resolvedPath, err)
 		return nil, c.GetFsError(fs, err)
@@ -269,12 +264,7 @@ func (c *Connection) handleUploadToExistingFile(fs vfs.Fs, resolvedPath, filePat
 		}
 	}
 
-	fileMetadata := make(map[string]string)
-	if common.Config.AddProtocolMetadata {
-		fileMetadata["protocol"] = "sftp"
-	}
-
-	file, w, cancelFn, err := fs.Create(filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, fileMetadata)
+	file, w, cancelFn, err := fs.Create(filePath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, util.AddProtocolMetadata(common.Config.AddProtocolMetadata, protocol))
 	if err != nil {
 		c.Log(logger.LevelError, "error creating file %#v: %+v", resolvedPath, err)
 		return nil, c.GetFsError(fs, err)

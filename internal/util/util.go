@@ -722,3 +722,15 @@ func PanicOnError(err error) {
 		panic(fmt.Errorf("unexpected error: %w", err))
 	}
 }
+
+// AddProtocolMetadata adds the protocol used to upload the file as metadata to S3, GCS, Azure Blob files.
+// Returns {"protocol": PROTOCOL_USED} if true, nil if false
+func AddProtocolMetadata(add bool, protocol string) map[string]string {
+	metadata := make(map[string]string)
+
+	if add {
+		metadata["protocol"] = protocol
+	}
+
+	return metadata
+}

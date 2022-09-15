@@ -29,6 +29,7 @@ import (
 	"github.com/drakkan/sftpgo/v2/internal/common"
 	"github.com/drakkan/sftpgo/v2/internal/dataprovider"
 	"github.com/drakkan/sftpgo/v2/internal/logger"
+	"github.com/drakkan/sftpgo/v2/internal/util"
 	"github.com/drakkan/sftpgo/v2/internal/vfs"
 )
 
@@ -406,12 +407,7 @@ func (c *Connection) handleFTPUploadToNewFile(fs vfs.Fs, flags int, resolvedPath
 		return nil, fmt.Errorf("%w, denied by pre-upload action", ftpserver.ErrFileNameNotAllowed)
 	}
 
-	fileMetadata := make(map[string]string)
-	if common.Config.AddProtocolMetadata {
-		fileMetadata["protocol"] = "ftp"
-	}
-
-	file, w, cancelFn, err := fs.Create(filePath, flags, fileMetadata)
+	file, w, cancelFn, err := fs.Create(filePath, flags, util.AddProtocolMetadata(common.Config.AddProtocolMetadata, protocol))
 	if err != nil {
 		c.Log(logger.LevelError, "error creating file %#v, flags %v: %+v", resolvedPath, flags, err)
 		return nil, c.GetFsError(fs, err)
@@ -466,12 +462,7 @@ func (c *Connection) handleFTPUploadToExistingFile(fs vfs.Fs, flags int, resolve
 		}
 	}
 
-	fileMetadata := make(map[string]string)
-	if common.Config.AddProtocolMetadata {
-		fileMetadata["protocol"] = "ftp"
-	}
-
-	file, w, cancelFn, err := fs.Create(filePath, flags, fileMetadata)
+	file, w, cancelFn, err := fs.Create(filePath, flags, util.AddProtocolMetadata(common.Config.AddProtocolMetadata, protocol))
 	if err != nil {
 		c.Log(logger.LevelError, "error opening existing file, flags: %v, source: %#v, err: %+v", flags, filePath, err)
 		return nil, c.GetFsError(fs, err)

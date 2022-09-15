@@ -31,6 +31,7 @@ import (
 
 const (
 	logSender = "ftpd"
+	protocol  = "ftp"
 )
 
 var (

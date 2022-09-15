@@ -407,13 +407,8 @@ func (c *Connection) handleSFTPUploadToNewFile(fs vfs.Fs, pflags sftp.FileOpenFl
 		return nil, c.GetPermissionDeniedError()
 	}
 
-	fileMetadata := make(map[string]string)
-	if common.Config.AddProtocolMetadata {
-		fileMetadata["protocol"] = "sftp"
-	}
-
 	osFlags := getOSOpenFlags(pflags)
-	file, w, cancelFn, err := fs.Create(filePath, osFlags, fileMetadata)
+	file, w, cancelFn, err := fs.Create(filePath, osFlags, util.AddProtocolMetadata(common.Config.AddProtocolMetadata, protocol))
 	if err != nil {
 		c.Log(logger.LevelError, "error creating file %#vm os flags %v, pflags %+v: %+v", resolvedPath, osFlags, pflags, err)
 		return nil, c.GetFsError(fs, err)
@@ -469,12 +464,7 @@ func (c *Connection) handleSFTPUploadToExistingFile(fs vfs.Fs, pflags sftp.FileO
 		}
 	}
 
-	fileMetadata := make(map[string]string)
-	if common.Config.AddProtocolMetadata {
-		fileMetadata["protocol"] = "sftp"
-	}
-
-	file, w, cancelFn, err := fs.Create(filePath, osFlags, fileMetadata)
+	file, w, cancelFn, err := fs.Create(filePath, osFlags, util.AddProtocolMetadata(common.Config.AddProtocolMetadata, protocol))
 	if err != nil {
 		c.Log(logger.LevelError, "error opening existing file, os flags %v, pflags: %+v, source: %#v, err: %+v",
 			osFlags, pflags, filePath, err)

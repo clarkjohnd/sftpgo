@@ -24,6 +24,7 @@ import (
 
 const (
 	logSender        = "sftpd"
+	protocol         = "sftp"
 	handshakeTimeout = 2 * time.Minute
 )
 

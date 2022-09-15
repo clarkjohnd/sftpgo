@@ -37,6 +37,7 @@ const (
 
 const (
 	logSender = "webdavd"
+	protocol  = "webdav"
 )
 
 var (
