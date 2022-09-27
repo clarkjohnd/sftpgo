@@ -143,9 +143,11 @@ var (
 	// Connections is the list of active connections
 	Connections ActiveConnections
 	// QuotaScans is the list of active quota scans
-	QuotaScans         ActiveScans
-	transfersChecker   TransfersChecker
-	supportedProtocols = []string{ProtocolSFTP, ProtocolSCP, ProtocolSSH, ProtocolFTP, ProtocolWebDAV,
+	QuotaScans ActiveScans
+	// ActiveMetadataChecks holds the active metadata checks
+	ActiveMetadataChecks MetadataChecks
+	transfersChecker     TransfersChecker
+	supportedProtocols   = []string{ProtocolSFTP, ProtocolSCP, ProtocolSSH, ProtocolFTP, ProtocolWebDAV,
 		ProtocolHTTP, ProtocolHTTPShare, ProtocolOIDC}
 	disconnHookProtocols = []string{ProtocolSFTP, ProtocolSCP, ProtocolSSH, ProtocolFTP}
 	// the map key is the protocol, for each protocol we can have multiple rate limiters
@@ -581,11 +583,11 @@ func (c *Configuration) ExecuteStartupHook() error {
 		return err
 	}
 	startTime := time.Now()
-	timeout, env := command.GetConfig(c.StartupHook)
+	timeout, env, args := command.GetConfig(c.StartupHook, command.HookStartup)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, c.StartupHook)
+	cmd := exec.CommandContext(ctx, c.StartupHook, args...)
 	cmd.Env = env
 	err := cmd.Run()
 	logger.Debug(logSender, "", "Startup hook executed, elapsed: %v, error: %v", time.Since(startTime), err)
@@ -627,12 +629,12 @@ func (c *Configuration) executePostDisconnectHook(remoteAddr, protocol, username
 		logger.Debug(protocol, connID, "invalid post disconnect hook %#v", c.PostDisconnectHook)
 		return
 	}
-	timeout, env := command.GetConfig(c.PostDisconnectHook)
+	timeout, env, args := command.GetConfig(c.PostDisconnectHook, command.HookPostDisconnect)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	startTime := time.Now()
-	cmd := exec.CommandContext(ctx, c.PostDisconnectHook)
+	cmd := exec.CommandContext(ctx, c.PostDisconnectHook, args...)
 	cmd.Env = append(env,
 		fmt.Sprintf("SFTPGO_CONNECTION_IP=%v", ipAddr),
 		fmt.Sprintf("SFTPGO_CONNECTION_USERNAME=%v", username),
@@ -687,11 +689,11 @@ func (c *Configuration) ExecutePostConnectHook(ipAddr, protocol string) error {
 		logger.Warn(protocol, "", "Login from ip %#v denied: %v", ipAddr, err)
 		return err
 	}
-	timeout, env := command.GetConfig(c.PostConnectHook)
+	timeout, env, args := command.GetConfig(c.PostConnectHook, command.HookPostConnect)
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, c.PostConnectHook)
+	cmd := exec.CommandContext(ctx, c.PostConnectHook, args...)
 	cmd.Env = append(env,
 		fmt.Sprintf("SFTPGO_CONNECTION_IP=%v", ipAddr),
 		fmt.Sprintf("SFTPGO_CONNECTION_PROTOCOL=%v", protocol))
@@ -1079,6 +1081,7 @@ func (conns *ActiveConnections) GetStats() []ConnectionStatus {
 	defer conns.RUnlock()
 
 	stats := make([]ConnectionStatus, 0, len(conns.connections))
+	node := dataprovider.GetNodeName()
 	for _, c := range conns.connections {
 		stat := ConnectionStatus{
 			Username:       c.GetUsername(),
@@ -1090,6 +1093,7 @@ func (conns *ActiveConnections) GetStats() []ConnectionStatus {
 			Protocol:       c.GetProtocol(),
 			Command:        c.GetCommand(),
 			Transfers:      c.GetTransfers(),
+			Node:           node,
 		}
 		stats = append(stats, stat)
 	}
@@ -1116,6 +1120,8 @@ type ConnectionStatus struct {
 	Transfers []ConnectionTransfer `json:"active_transfers,omitempty"`
 	// SSH command or WebDAV method
 	Command string `json:"command,omitempty"`
+	// Node identifier, omitted for single node installations
+	Node string `json:"node,omitempty"`
 }
 
 // GetConnectionDuration returns the connection duration as string
@@ -1157,7 +1163,7 @@ func (c *ConnectionStatus) GetTransfersAsString() string {
 	return result
 }
 
-// ActiveQuotaScan defines an active quota scan for a user home dir
+// ActiveQuotaScan defines an active quota scan for a user
 type ActiveQuotaScan struct {
 	// Username to which the quota scan refers
 	Username string `json:"username"`
@@ -1180,7 +1186,7 @@ type ActiveScans struct {
 	FolderScans []ActiveVirtualFolderQuotaScan
 }
 
-// GetUsersQuotaScans returns the active quota scans for users home directories
+// GetUsersQuotaScans returns the active users quota scans
 func (s *ActiveScans) GetUsersQuotaScans() []ActiveQuotaScan {
 	s.RLock()
 	defer s.RUnlock()
@@ -1264,6 +1270,68 @@ func (s *ActiveScans) RemoveVFolderQuotaScan(folderName string) bool {
 			lastIdx := len(s.FolderScans) - 1
 			s.FolderScans[idx] = s.FolderScans[lastIdx]
 			s.FolderScans = s.FolderScans[:lastIdx]
+			return true
+		}
+	}
+
+	return false
+}
+
+// MetadataCheck defines an active metadata check
+type MetadataCheck struct {
+	// Username to which the metadata check refers
+	Username string `json:"username"`
+	// check start time as unix timestamp in milliseconds
+	StartTime int64 `json:"start_time"`
+}
+
+// MetadataChecks holds the active metadata checks
+type MetadataChecks struct {
+	sync.RWMutex
+	checks []MetadataCheck
+}
+
+// Get returns the active metadata checks
+func (c *MetadataChecks) Get() []MetadataCheck {
+	c.RLock()
+	defer c.RUnlock()
+
+	checks := make([]MetadataCheck, len(c.checks))
+	copy(checks, c.checks)
+
+	return checks
+}
+
+// Add adds a user to the ones with active metadata checks.
+// Return false if a metadata check is already active for the specified user
+func (c *MetadataChecks) Add(username string) bool {
+	c.Lock()
+	defer c.Unlock()
+
+	for idx := range c.checks {
+		if c.checks[idx].Username == username {
+			return false
+		}
+	}
+
+	c.checks = append(c.checks, MetadataCheck{
+		Username:  username,
+		StartTime: util.GetTimeAsMsSinceEpoch(time.Now()),
+	})
+
+	return true
+}
+
+// Remove removes a user from the ones with active metadata checks
+func (c *MetadataChecks) Remove(username string) bool {
+	c.Lock()
+	defer c.Unlock()
+
+	for idx := range c.checks {
+		if c.checks[idx].Username == username {
+			lastIdx := len(c.checks) - 1
+			c.checks[idx] = c.checks[lastIdx]
+			c.checks = c.checks[:lastIdx]
 			return true
 		}
 	}

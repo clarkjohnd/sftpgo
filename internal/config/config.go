@@ -100,6 +100,7 @@ var (
 		Port:                  8080,
 		EnableWebAdmin:        true,
 		EnableWebClient:       true,
+		EnableRESTAPI:         true,
 		EnabledLoginMethods:   0,
 		EnableHTTPS:           false,
 		CertificateFile:       "",
@@ -362,7 +363,12 @@ func Init() {
 			CreateDefaultAdmin: false,
 			NamingRules:        1,
 			IsShared:           0,
-			BackupsPath:        "backups",
+			Node: dataprovider.NodeConfig{
+				Host:  "",
+				Port:  0,
+				Proto: "http",
+			},
+			BackupsPath: "backups",
 		},
 		HTTPDConfig: httpd.Conf{
 			Bindings:           []httpd.Binding{defaultHTTPDBinding},
@@ -1685,6 +1691,12 @@ func getHTTPDBindingFromEnv(idx int) { //nolint:gocyclo
 		isSet = true
 	}
 
+	enableRESTAPI, ok := lookupBoolFromEnv(fmt.Sprintf("SFTPGO_HTTPD__BINDINGS__%v__ENABLE_REST_API", idx))
+	if ok {
+		binding.EnableRESTAPI = enableRESTAPI
+		isSet = true
+	}
+
 	enabledLoginMethods, ok := lookupIntFromEnv(fmt.Sprintf("SFTPGO_HTTPD__BINDINGS__%v__ENABLED_LOGIN_METHODS", idx))
 	if ok {
 		binding.EnabledLoginMethods = int(enabledLoginMethods)
@@ -1960,6 +1972,9 @@ func setViperDefaults() {
 	viper.SetDefault("data_provider.create_default_admin", globalConf.ProviderConf.CreateDefaultAdmin)
 	viper.SetDefault("data_provider.naming_rules", globalConf.ProviderConf.NamingRules)
 	viper.SetDefault("data_provider.is_shared", globalConf.ProviderConf.IsShared)
+	viper.SetDefault("data_provider.node.host", globalConf.ProviderConf.Node.Host)
+	viper.SetDefault("data_provider.node.port", globalConf.ProviderConf.Node.Port)
+	viper.SetDefault("data_provider.node.proto", globalConf.ProviderConf.Node.Proto)
 	viper.SetDefault("data_provider.backups_path", globalConf.ProviderConf.BackupsPath)
 	viper.SetDefault("httpd.templates_path", globalConf.HTTPDConfig.TemplatesPath)
 	viper.SetDefault("httpd.static_files_path", globalConf.HTTPDConfig.StaticFilesPath)

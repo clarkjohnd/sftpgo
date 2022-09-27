@@ -309,6 +309,8 @@ func TestShouldBind(t *testing.T) {
 			},
 		},
 	}
+	require.False(t, c.ShouldBind())
+	c.Bindings[0].EnableRESTAPI = true
 	require.True(t, c.ShouldBind())
 
 	c.Bindings[0].Port = 0
@@ -546,6 +548,11 @@ func TestInvalidToken(t *testing.T) {
 
 	rr = httptest.NewRecorder()
 	deleteUser(rr, req)
+	assert.Equal(t, http.StatusBadRequest, rr.Code)
+	assert.Contains(t, rr.Body.String(), "Invalid token claims")
+
+	rr = httptest.NewRecorder()
+	getActiveConnections(rr, req)
 	assert.Equal(t, http.StatusBadRequest, rr.Code)
 	assert.Contains(t, rr.Body.String(), "Invalid token claims")
 
@@ -833,6 +840,7 @@ func TestCSRFToken(t *testing.T) {
 		Port:            8080,
 		EnableWebAdmin:  true,
 		EnableWebClient: true,
+		EnableRESTAPI:   true,
 		RenderOpenAPI:   true,
 	})
 	fn := verifyCSRFHeader(r)
@@ -1080,6 +1088,7 @@ func TestAPIKeyAuthForbidden(t *testing.T) {
 		Port:            8080,
 		EnableWebAdmin:  true,
 		EnableWebClient: true,
+		EnableRESTAPI:   true,
 		RenderOpenAPI:   true,
 	})
 	fn := forbidAPIKeyAuthentication(r)
@@ -1104,6 +1113,7 @@ func TestJWTTokenValidation(t *testing.T) {
 			Port:            8080,
 			EnableWebAdmin:  true,
 			EnableWebClient: true,
+			EnableRESTAPI:   true,
 			RenderOpenAPI:   true,
 		},
 	}
@@ -1648,6 +1658,7 @@ func TestProxyHeaders(t *testing.T) {
 		Port:                8080,
 		EnableWebAdmin:      true,
 		EnableWebClient:     false,
+		EnableRESTAPI:       true,
 		ProxyAllowed:        []string{testIP, "10.8.0.0/30"},
 		ClientIPProxyHeader: "x-forwarded-for",
 	}
@@ -1739,6 +1750,7 @@ func TestRecoverer(t *testing.T) {
 		Port:            8080,
 		EnableWebAdmin:  true,
 		EnableWebClient: false,
+		EnableRESTAPI:   true,
 	}
 	server := newHttpdServer(b, "../static", "", CorsConfig{}, "../openapi")
 	server.initializeRouter()
@@ -1811,6 +1823,11 @@ func TestZipErrors(t *testing.T) {
 		assert.Contains(t, err.Error(), "write error")
 	}
 
+	err = addZipEntry(wr, connection, "/"+filepath.Base(testDir), path.Join("/", filepath.Base(testDir), "dir"))
+	if assert.Error(t, err) {
+		assert.Contains(t, err.Error(), "is outside base dir")
+	}
+
 	testFilePath := filepath.Join(testDir, "ziptest.zip")
 	err = os.WriteFile(testFilePath, util.GenerateRandomBytes(65535), os.ModePerm)
 	assert.NoError(t, err)
@@ -1854,6 +1871,7 @@ func TestWebAdminRedirect(t *testing.T) {
 		Port:            8080,
 		EnableWebAdmin:  true,
 		EnableWebClient: false,
+		EnableRESTAPI:   true,
 	}
 	server := newHttpdServer(b, "../static", "", CorsConfig{}, "../openapi")
 	server.initializeRouter()
@@ -2218,6 +2236,13 @@ func TestWebUserInvalidClaims(t *testing.T) {
 	server.handleClientGetShares(rr, req)
 	assert.Equal(t, http.StatusForbidden, rr.Code)
 	assert.Contains(t, rr.Body.String(), "Invalid token claims")
+
+	rr = httptest.NewRecorder()
+	req, _ = http.NewRequest(http.MethodGet, webClientViewPDFPath, nil)
+	req.Header.Set("Cookie", fmt.Sprintf("jwt=%v", token["access_token"]))
+	server.handleClientGetPDF(rr, req)
+	assert.Equal(t, http.StatusForbidden, rr.Code)
+	assert.Contains(t, rr.Body.String(), "Invalid token claims")
 }
 
 func TestInvalidClaims(t *testing.T) {
@@ -2318,16 +2343,19 @@ func TestLoginLinks(t *testing.T) {
 	b := Binding{
 		EnableWebAdmin:  true,
 		EnableWebClient: false,
+		EnableRESTAPI:   true,
 	}
 	assert.False(t, b.showClientLoginURL())
 	b = Binding{
 		EnableWebAdmin:  false,
 		EnableWebClient: true,
+		EnableRESTAPI:   true,
 	}
 	assert.False(t, b.showAdminLoginURL())
 	b = Binding{
 		EnableWebAdmin:  true,
 		EnableWebClient: true,
+		EnableRESTAPI:   true,
 	}
 	assert.True(t, b.showAdminLoginURL())
 	assert.True(t, b.showClientLoginURL())
@@ -2374,7 +2402,7 @@ func TestUserCanResetPassword(t *testing.T) {
 
 func TestMetadataAPI(t *testing.T) {
 	username := "metadatauser"
-	assert.False(t, activeMetadataChecks.remove(username))
+	assert.False(t, common.ActiveMetadataChecks.Remove(username))
 
 	user := dataprovider.User{
 		BaseUser: sdk.BaseUser{
@@ -2389,7 +2417,7 @@ func TestMetadataAPI(t *testing.T) {
 	err := dataprovider.AddUser(&user, "", "")
 	assert.NoError(t, err)
 
-	assert.True(t, activeMetadataChecks.add(username))
+	assert.True(t, common.ActiveMetadataChecks.Add(username))
 
 	req, err := http.NewRequest(http.MethodPost, path.Join(metadataBasePath, username, "check"), nil)
 	assert.NoError(t, err)
@@ -2401,8 +2429,8 @@ func TestMetadataAPI(t *testing.T) {
 	startMetadataCheck(rr, req)
 	assert.Equal(t, http.StatusConflict, rr.Code)
 
-	assert.True(t, activeMetadataChecks.remove(username))
-	assert.Len(t, activeMetadataChecks.get(), 0)
+	assert.True(t, common.ActiveMetadataChecks.Remove(username))
+	assert.Len(t, common.ActiveMetadataChecks.Get(), 0)
 	err = dataprovider.DeleteUser(username, "", "")
 	assert.NoError(t, err)
 
@@ -2484,6 +2512,7 @@ func TestSecureMiddlewareIntegration(t *testing.T) {
 		},
 		enableWebAdmin:  true,
 		enableWebClient: true,
+		enableRESTAPI:   true,
 	}
 	server.binding.Security.updateProxyHeaders()
 	err := server.binding.parseAllowedProxy()
@@ -2555,6 +2584,27 @@ func TestGetCompressedFileName(t *testing.T) {
 	require.Equal(t, fmt.Sprintf("%s-file1.zip", username), res)
 }
 
+func TestRESTAPIDisabled(t *testing.T) {
+	server := httpdServer{
+		enableWebAdmin:  true,
+		enableWebClient: true,
+		enableRESTAPI:   false,
+	}
+	server.initializeRouter()
+	assert.False(t, server.enableRESTAPI)
+	rr := httptest.NewRecorder()
+	r, err := http.NewRequest(http.MethodGet, healthzPath, nil)
+	assert.NoError(t, err)
+	server.router.ServeHTTP(rr, r)
+	assert.Equal(t, http.StatusOK, rr.Code)
+
+	rr = httptest.NewRecorder()
+	r, err = http.NewRequest(http.MethodGet, tokenPath, nil)
+	assert.NoError(t, err)
+	server.router.ServeHTTP(rr, r)
+	assert.Equal(t, http.StatusNotFound, rr.Code)
+}
+
 func TestWebAdminSetupWithInstallCode(t *testing.T) {
 	installationCode = "1234"
 	// delete all the admins
@@ -2575,6 +2625,7 @@ func TestWebAdminSetupWithInstallCode(t *testing.T) {
 	server := httpdServer{
 		enableWebAdmin:  true,
 		enableWebClient: true,
+		enableRESTAPI:   true,
 	}
 	server.initializeRouter()
 
